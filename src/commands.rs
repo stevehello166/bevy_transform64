@@ -1,6 +1,6 @@
 
 
-use bevy::ecs::{hierarchy::ChildOf, prelude::Entity, system::{Command, EntityCommands}, world::World, entity::EntityDoesNotExistError};
+use bevy::ecs::{hierarchy::ChildOf, prelude::Entity, system::{Command, EntityCommands}, world::World};
 
 use crate::{DGlobalTransform, DTransform};
 
@@ -81,7 +81,7 @@ pub trait BuildChildrenDTransformExt {
     fn remove_space_parent_in_place(&mut self) -> &mut Self;
 }
 
-impl<'w, 's, 'a> BuildChildrenDTransformExt for EntityCommands<'a> {
+impl<'a> BuildChildrenDTransformExt for EntityCommands<'a> {
     fn remove_space_parent_in_place(&mut self) -> &mut Self {
         let child = self.id();
         self.commands().queue(RemoveParentInPlace { child });

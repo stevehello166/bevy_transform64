@@ -114,7 +114,7 @@ impl DGlobalTransform {
     /// Get the translation as a [`Vec3`].
     #[inline]
     pub fn translation(&self) -> DVec3 {
-        self.0.translation.into()
+        self.0.translation
     }
 
     /// Get the translation as a [`Vec3A`].

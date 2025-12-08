@@ -3,7 +3,7 @@ use bevy::{ecs::{
     change_detection::Ref,
     hierarchy::{ChildOf, Children},
     prelude::{Changed, DetectChanges, Entity, Query, With, Without},
-}, prelude::{Added, Commands, GlobalTransform, RemovedComponents, Transform, Res, ResMut}, math::{Affine3A, Vec3A, DAffine3, DVec3}};
+}, prelude::{Added, Commands, GlobalTransform, Transform, Res, ResMut}, math::{Affine3A, Vec3A, DAffine3, DVec3}};
 
 fn daffine_to_f32(
     affine: &DAffine3,
@@ -33,7 +33,7 @@ pub fn sync_f64_f32(
     let world_origin_pos = match world_origin.clone() {
         WorldOrigin::Entity(e) => {
             if let Ok((_, transform, _)) = query_changed.get_mut(e) {
-                transform.translation().clone()
+                transform.translation()
             } else {
                 println!("Entity not found in sync_f64_f32");
                 DVec3::ZERO
@@ -52,7 +52,7 @@ pub fn sync_f64_f32(
         );
     }
 
-    for (entity, d_global_transform, mut global_transforms) in query_changed.iter_mut() {
+    for (_entity, d_global_transform, mut global_transforms) in query_changed.iter_mut() {
         let mut affine = d_global_transform.affine();
         affine.translation -= world_origin_pos;
         let affine_f32 = daffine_to_f32(&affine);
@@ -60,8 +60,8 @@ pub fn sync_f64_f32(
         *global_transforms = GlobalTransform::from(affine_f32);
     }
 
-    for (entity, d_transform, mut transform, parent) in query_changed_tranform.iter_mut() {
-        if let Some(parent) = parent {
+    for (_entity, d_transform, mut transform, parent) in query_changed_tranform.iter_mut() {
+        if let Some(_parent) = parent {
             transform.translation = d_transform.translation.as_vec3();
         } else {
             transform.translation = (d_transform.translation - world_origin_pos).as_vec3();
@@ -163,9 +163,9 @@ pub fn propagate_transforms(
 /// # Safety
 ///
 /// - While this function is running, `transform_query` must not have any fetches for `entity`,
-/// nor any of its descendants.
+///     nor any of its descendants.
 /// - The caller must ensure that the hierarchy leading to `entity`
-/// is well-formed and must remain as a tree or a forest. Each entity must have at most one parent.
+///     is well-formed and must remain as a tree or a forest. Each entity must have at most one parent.
 unsafe fn propagate_recursive(
     parent: &DGlobalTransform,
     transform_query: &Query<
@@ -257,39 +257,12 @@ pub fn convert_world_origin(
     };
 }
 
-pub fn replace_transforms(
-    mut commands : Commands,
-    mut query: Query<(&mut Transform, &DTransform), Without<ChildOf>>,
-    simple_world_origin : Res<SimpleWorldOrigin>
-) {
-    // for (mut transform, dtransform) in query.iter_mut() {
-    //     dtransform.set_f32_transform(&mut transform, simple_world_origin.origin);
-    // }
-    // for (entity, transform) in query.iter() {
-    //     let dtransform = DTransform {
-    //         translation: DVec3::new(transform.translation.x as f64, transform.translation.y as f64, transform.translation.z as f64),
-    //         scale: DVec3::new(transform.scale.x as f64, transform.scale.y as f64, transform.scale.z as f64),
-    //         rotation: bevy::math::DQuat { x: transform.rotation.x as f64, y: transform.rotation.y as f64, z: transform.rotation.z as f64, w: transform.rotation.w as f64 },
-    //     };
-
-    //     commands.entity(entity).insert(DTransformBundle::from_transform(dtransform)).remove::<Transform>().insert(GlobalTransform::default());
-
-    //     println!("Remove with creation transform of {:?}", transform);
-    // }
-
-    // for (entity, transform) in del_query.iter() {
-    //     commands.entity(entity).remove::<Transform>().insert(GlobalTransform::default());
-    //     println!("Remove transform of {:?}", entity);
-    // }
-}
-
 #[cfg(test)]
 mod test {
     use bevy::app::prelude::*;
     use bevy::ecs::prelude::*; 
-    use bevy::math::{vec3, dvec3};
-    use bevy::tasks::{ComputeTaskPool, TaskPool};
-
+    use bevy::math::dvec3;
+    
     use crate::components::{DGlobalTransform, DTransform};
     use crate::{systems::*, DTransformBundle};
     
