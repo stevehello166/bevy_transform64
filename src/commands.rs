@@ -1,6 +1,9 @@
-
-
-use bevy::ecs::{hierarchy::ChildOf, prelude::Entity, system::{Command, EntityCommands}, world::World};
+use bevy::ecs::{
+    hierarchy::ChildOf,
+    prelude::Entity,
+    system::{Command, EntityCommands},
+    world::World,
+};
 
 use crate::{DGlobalTransform, DTransform};
 
@@ -17,14 +20,19 @@ pub struct AddChildInPlace {
 }
 
 impl Command for AddChildInPlace {
-
     fn apply(self, world: &mut World) {
         world.entity_mut(self.child).insert(ChildOf(self.parent));
-        // 
+        //
         // FIXME: Replace this closure with a `try` block. See: https://github.com/rust-lang/rust/issues/31436.
         let mut update_transform = || {
-            let parent = *world.get_entity(self.parent).ok()?.get::<DGlobalTransform>()?;
-            let child_global = *world.get_entity(self.child).ok()?.get::<DGlobalTransform>()?;
+            let parent = *world
+                .get_entity(self.parent)
+                .ok()?
+                .get::<DGlobalTransform>()?;
+            let child_global = *world
+                .get_entity(self.child)
+                .ok()?
+                .get::<DGlobalTransform>()?;
             let mut child_entity = world.get_entity_mut(self.child).ok()?;
             let mut child = child_entity.get_mut::<DTransform>()?;
             *child = child_global.reparented_to(&parent);
@@ -43,12 +51,14 @@ pub struct RemoveParentInPlace {
     pub child: Entity,
 }
 impl Command for RemoveParentInPlace {
-
     fn apply(self, world: &mut World) {
         world.entity_mut(self.child).remove::<ChildOf>();
         // FIXME: Replace this closure with a `try` block. See: https://github.com/rust-lang/rust/issues/31436.
         let mut update_transform = || {
-            let child_global = *world.get_entity(self.child).ok()?.get::<DGlobalTransform>()?;
+            let child_global = *world
+                .get_entity(self.child)
+                .ok()?
+                .get::<DGlobalTransform>()?;
             let mut child_entity = world.get_entity_mut(self.child).ok()?;
             let mut child = child_entity.get_mut::<DTransform>()?;
             *child = child_global.compute_transform();

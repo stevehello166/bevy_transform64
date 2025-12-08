@@ -1,10 +1,12 @@
 use std::ops::Mul;
 
+use super::DGlobalTransform;
 use bevy::math::*;
 use bevy::prelude::*;
-use super::DGlobalTransform;
 
-#[derive(Component, Debug, PartialEq, Clone, Copy, Reflect, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Component, Debug, PartialEq, Clone, Copy, Reflect, serde::Serialize, serde::Deserialize,
+)]
 #[reflect(Component, Default, PartialEq)]
 pub struct DTransform {
     /// Position of the entity. In 2d, the last value of the `Vec3` is used for z-ordering.
@@ -26,7 +28,6 @@ pub struct DTransform {
     /// [`scale`]: https://github.com/bevyengine/bevy/blob/latest/examples/transforms/scale.rs
     pub scale: DVec3,
 }
-
 
 impl DTransform {
     /// An identity [`Transform`] with no translation, rotation, and a scale of 1 on all axes.
@@ -342,10 +343,14 @@ impl DTransform {
         point
     }
 
-    pub fn set_f32_transform(&self, dst : &mut Transform, world_origin : DVec3) {
+    pub fn set_f32_transform(&self, dst: &mut Transform, world_origin: DVec3) {
         let dp = self.translation - world_origin;
         dst.translation = Vec3::new(dp.x as f32, dp.y as f32, dp.z as f32);
-        dst.scale = Vec3::new(self.scale.x as f32, self.scale.y as f32, self.scale.z as f32);
+        dst.scale = Vec3::new(
+            self.scale.x as f32,
+            self.scale.y as f32,
+            self.scale.z as f32,
+        );
         dst.rotation = Quat::from_xyzw(
             self.rotation.x as f32,
             self.rotation.y as f32,

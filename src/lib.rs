@@ -1,5 +1,4 @@
-
-use bevy::{prelude::*, math::*, ecs::schedule::ScheduleLabel};
+use bevy::{ecs::schedule::ScheduleLabel, math::*, prelude::*};
 
 pub mod commands;
 pub mod components;
@@ -18,15 +17,15 @@ pub mod prelude {
 #[derive(Resource, Clone, Debug)]
 pub enum WorldOrigin {
     Entity(Entity),
-    Position(DVec3)
+    Position(DVec3),
 }
 
 #[derive(Resource, Clone, Debug)]
 pub struct SimpleWorldOrigin {
-    pub origin: DVec3
+    pub origin: DVec3,
 }
 
-use prelude::{DTransform, DGlobalTransform};
+use prelude::{DGlobalTransform, DTransform};
 
 #[derive(Bundle, Clone, Copy, Debug, Default)]
 pub struct DTransformBundle {
@@ -35,7 +34,6 @@ pub struct DTransformBundle {
     /// The global transform of the entity.
     pub global: DGlobalTransform,
 }
-
 
 impl DTransformBundle {
     /// An identity [`TransformBundle`] with no translation, rotation, and a scale of 1 on all axes.
@@ -75,7 +73,6 @@ pub enum DTransformSystem {
 #[derive(Default)]
 pub struct DTransformPlugin;
 
-
 impl Plugin for DTransformPlugin {
     fn build(&self, app: &mut App) {
         // A set for `propagate_transforms` to mark it as ambiguous with `sync_simple_transforms`.
@@ -87,32 +84,54 @@ impl Plugin for DTransformPlugin {
         struct SyncTransforms;
 
         app.register_type::<DTransform>()
-            .register_type::<DGlobalTransform>() 
+            .register_type::<DGlobalTransform>()
             .insert_resource(WorldOrigin::Position(DVec3::ZERO))
-            .insert_resource(SimpleWorldOrigin {origin : DVec3::ZERO})
+            .insert_resource(SimpleWorldOrigin {
+                origin: DVec3::ZERO,
+            })
             // add transform systems to startup so the first update is "correct"
             .configure_sets(PostUpdate, DTransformSystem::TransformPropagate)
-            .configure_sets(PostUpdate, SyncTransforms
+            .configure_sets(
+                PostUpdate,
+                SyncTransforms
                     .after(DTransformSystem::TransformPropagate)
-                    .after(bevy::transform::TransformSystems::Propagate))
-            .configure_sets(PostUpdate, PropagateTransformsSet.in_set(DTransformSystem::TransformPropagate))
+                    .after(bevy::transform::TransformSystems::Propagate),
+            )
+            .configure_sets(
+                PostUpdate,
+                PropagateTransformsSet.in_set(DTransformSystem::TransformPropagate),
+            )
             .edit_schedule(Startup, |schedule| {
-                schedule.configure_sets(
-                    DTransformSystem::TransformPropagate
-                );
+                schedule.configure_sets(DTransformSystem::TransformPropagate);
             })
-            .add_systems(Startup,(
+            .add_systems(
+                Startup,
+                (
+                    sync_simple_transforms
+                        .in_set(DTransformSystem::TransformPropagate)
+                        // FIXME: https://github.com/bevyengine/bevy/issues/4381
+                        // These systems cannot access the same entities,
+                        // due to subtle query filtering that is not yet correctly computed in the ambiguity detector
+                        .ambiguous_with(PropagateTransformsSet),
+                    propagate_transforms.in_set(PropagateTransformsSet),
+                ),
+            )
+            .add_systems(
+                PostUpdate,
                 sync_simple_transforms
-                    .in_set(DTransformSystem::TransformPropagate)
-                    // FIXME: https://github.com/bevyengine/bevy/issues/4381
-                    // These systems cannot access the same entities,
-                    // due to subtle query filtering that is not yet correctly computed in the ambiguity detector
-                    .ambiguous_with(PropagateTransformsSet),
+                    .ambiguous_with(PropagateTransformsSet)
+                    .in_set(DTransformSystem::TransformPropagate),
+            )
+            .add_systems(
+                PostUpdate,
                 propagate_transforms.in_set(PropagateTransformsSet),
-            ))
-            .add_systems(PostUpdate , sync_simple_transforms.ambiguous_with(PropagateTransformsSet).in_set(DTransformSystem::TransformPropagate))
-            .add_systems(PostUpdate, propagate_transforms.in_set(PropagateTransformsSet))
+            )
             .add_systems(PostUpdate, sync_f64_f32.in_set(SyncTransforms))
-            .add_systems(PostUpdate, convert_world_origin.after(sync_simple_transforms).in_set(DTransformSystem::TransformPropagate));
+            .add_systems(
+                PostUpdate,
+                convert_world_origin
+                    .after(sync_simple_transforms)
+                    .in_set(DTransformSystem::TransformPropagate),
+            );
     }
 }

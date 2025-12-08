@@ -5,9 +5,11 @@ use bevy::prelude::*;
 
 use super::DTransform;
 
-#[derive(Component, Debug, PartialEq, Clone, Copy, Reflect, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Component, Debug, PartialEq, Clone, Copy, Reflect, serde::Serialize, serde::Deserialize,
+)]
 #[reflect(Component, Default, PartialEq)]
-pub struct DGlobalTransform (DAffine3);
+pub struct DGlobalTransform(DAffine3);
 
 impl Default for DGlobalTransform {
     fn default() -> Self {
@@ -30,7 +32,6 @@ macro_rules! impl_local_axis {
         }
     };
 }
-
 
 impl DGlobalTransform {
     /// An identity [`GlobalTransform`] that maps all points in space to themselves.
@@ -86,7 +87,6 @@ impl DGlobalTransform {
         }
     }
 
-    
     #[inline]
     pub fn reparented_to(&self, parent: &DGlobalTransform) -> DTransform {
         let relative_affine = parent.affine().inverse() * self.affine();
