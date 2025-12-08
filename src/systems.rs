@@ -1,6 +1,6 @@
 use crate::{
     components::{DGlobalTransform, DTransform},
-    DTransformBundle, SimpleWorldOrigin, WorldOrigin,
+    SimpleWorldOrigin, WorldOrigin,
 };
 use bevy::{
     ecs::{
@@ -79,7 +79,6 @@ pub fn sync_f64_f32(
         let mut affine = d_global_transform.affine();
         affine.translation -= world_origin_pos;
         let affine_f32 = daffine_to_f32(&affine);
-        // println!("{:?}", affine_f32);
         *global_transforms = GlobalTransform::from(affine_f32);
     }
 
@@ -106,11 +105,11 @@ pub fn sync_f64_f32(
         // println!("Spawn dtransform with {:?}", f32_transform.rotation.as_f64());
         commands
             .entity(entity)
-            .insert(DTransformBundle::from_transform(DTransform {
+            .insert(DTransform {
                 translation: f32_transform.translation.as_dvec3(),
                 rotation: f32_transform.rotation.as_dquat(),
                 scale: f32_transform.scale.as_dvec3(),
-            }))
+            })
             .remove::<Transform>();
     }
 }
@@ -291,7 +290,7 @@ mod test {
     use bevy::math::dvec3;
 
     use crate::components::{DGlobalTransform, DTransform};
-    use crate::{systems::*, DTransformBundle};
+    use crate::systems::*;
 
     use bevy::ecs::{
         entity::EntityRow,
@@ -307,22 +306,14 @@ mod test {
         schedule.add_systems((sync_simple_transforms, propagate_transforms));
 
         // Root entity
-        world.spawn(DTransformBundle::from(DTransform::from_xyz(1.0, 0.0, 0.0)));
+        world.spawn(DTransform::from_xyz(1.0, 0.0, 0.0));
 
         let mut children = Vec::new();
         world
-            .spawn(DTransformBundle::from(DTransform::from_xyz(1.0, 0.0, 0.0)))
+            .spawn(DTransform::from_xyz(1.0, 0.0, 0.0))
             .with_children(|parent| {
-                children.push(
-                    parent
-                        .spawn(DTransformBundle::from(DTransform::from_xyz(0.0, 2.0, 0.)))
-                        .id(),
-                );
-                children.push(
-                    parent
-                        .spawn(DTransformBundle::from(DTransform::from_xyz(0.0, 0.0, 3.)))
-                        .id(),
-                );
+                children.push(parent.spawn(DTransform::from_xyz(0.0, 2.0, 0.)).id());
+                children.push(parent.spawn(DTransform::from_xyz(0.0, 0.0, 3.)).id());
             });
         schedule.run(&mut world);
 
@@ -349,18 +340,10 @@ mod test {
         let mut commands = Commands::new(&mut queue, &world);
         let mut children = Vec::new();
         commands
-            .spawn(DTransformBundle::from(DTransform::from_xyz(1.0, 0.0, 0.0)))
+            .spawn(DTransform::from_xyz(1.0, 0.0, 0.0))
             .with_children(|parent| {
-                children.push(
-                    parent
-                        .spawn(DTransformBundle::from(DTransform::from_xyz(0.0, 2.0, 0.0)))
-                        .id(),
-                );
-                children.push(
-                    parent
-                        .spawn(DTransformBundle::from(DTransform::from_xyz(0.0, 0.0, 3.0)))
-                        .id(),
-                );
+                children.push(parent.spawn(DTransform::from_xyz(0.0, 2.0, 0.0)).id());
+                children.push(parent.spawn(DTransform::from_xyz(0.0, 0.0, 3.0)).id());
             });
         queue.apply(&mut world);
         schedule.run(&mut world);

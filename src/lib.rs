@@ -9,9 +9,7 @@ use systems::*;
 #[doc(hidden)]
 pub mod prelude {
     #[doc(hidden)]
-    pub use crate::{
-        commands::BuildChildrenDTransformExt, components::*, DTransformBundle, DTransformPlugin,
-    };
+    pub use crate::{commands::BuildChildrenDTransformExt, components::*, DTransformPlugin};
 }
 
 #[derive(Resource, Clone, Debug)]
@@ -26,41 +24,6 @@ pub struct SimpleWorldOrigin {
 }
 
 use prelude::{DGlobalTransform, DTransform};
-
-#[derive(Bundle, Clone, Copy, Debug, Default)]
-pub struct DTransformBundle {
-    /// The transform of the entity.
-    pub local: DTransform,
-    /// The global transform of the entity.
-    pub global: DGlobalTransform,
-}
-
-impl DTransformBundle {
-    /// An identity [`TransformBundle`] with no translation, rotation, and a scale of 1 on all axes.
-    pub const IDENTITY: Self = DTransformBundle {
-        local: DTransform::IDENTITY,
-        global: DGlobalTransform::IDENTITY,
-    };
-
-    /// Creates a new [`TransformBundle`] from a [`Transform`].
-    ///
-    /// This initializes [`GlobalTransform`] as identity, to be updated later by the
-    /// [`CoreSet::PostUpdate`](crate::CoreSet::PostUpdate) stage.
-    #[inline]
-    pub const fn from_transform(transform: DTransform) -> Self {
-        DTransformBundle {
-            local: transform,
-            ..Self::IDENTITY
-        }
-    }
-}
-
-impl From<DTransform> for DTransformBundle {
-    #[inline]
-    fn from(transform: DTransform) -> Self {
-        Self::from_transform(transform)
-    }
-}
 
 /// Set enum for the systems relating to transform propagation
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet, ScheduleLabel)]
