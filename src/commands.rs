@@ -1,10 +1,6 @@
 
 
-use bevy::ecs::{prelude::Entity, system::Command, system::EntityCommands, world::World};
-use bevy::hierarchy::{AddChild, RemoveParent};
-
-#[cfg(doc)]
-use bevy::hierarchy::BuildChildren;
+use bevy::ecs::{hierarchy::ChildOf, prelude::Entity, system::{Command, EntityCommands}, world::World, entity::EntityDoesNotExistError};
 
 use crate::{DGlobalTransform, DTransform};
 
@@ -23,16 +19,13 @@ pub struct AddChildInPlace {
 impl Command for AddChildInPlace {
 
     fn apply(self, world: &mut World) {
-        let hierarchy_command = AddChild {
-            child: self.child,
-            parent: self.parent,
-        };
-        hierarchy_command.apply(world);
+        world.entity_mut(self.child).insert(ChildOf(self.parent));
+        // 
         // FIXME: Replace this closure with a `try` block. See: https://github.com/rust-lang/rust/issues/31436.
         let mut update_transform = || {
-            let parent = *world.get_entity(self.parent)?.get::<DGlobalTransform>()?;
-            let child_global = *world.get_entity(self.child)?.get::<DGlobalTransform>()?;
-            let mut child_entity = world.get_entity_mut(self.child)?;
+            let parent = *world.get_entity(self.parent).ok()?.get::<DGlobalTransform>()?;
+            let child_global = *world.get_entity(self.child).ok()?.get::<DGlobalTransform>()?;
+            let mut child_entity = world.get_entity_mut(self.child).ok()?;
             let mut child = child_entity.get_mut::<DTransform>()?;
             *child = child_global.reparented_to(&parent);
             Some(())
@@ -52,12 +45,11 @@ pub struct RemoveParentInPlace {
 impl Command for RemoveParentInPlace {
 
     fn apply(self, world: &mut World) {
-        let hierarchy_command = RemoveParent { child: self.child };
-        hierarchy_command.apply(world);
+        world.entity_mut(self.child).remove::<ChildOf>();
         // FIXME: Replace this closure with a `try` block. See: https://github.com/rust-lang/rust/issues/31436.
         let mut update_transform = || {
-            let child_global = *world.get_entity(self.child)?.get::<DGlobalTransform>()?;
-            let mut child_entity = world.get_entity_mut(self.child)?;
+            let child_global = *world.get_entity(self.child).ok()?.get::<DGlobalTransform>()?;
+            let mut child_entity = world.get_entity_mut(self.child).ok()?;
             let mut child = child_entity.get_mut::<DTransform>()?;
             *child = child_global.compute_transform();
             Some(())
@@ -89,16 +81,16 @@ pub trait BuildChildrenDTransformExt {
     fn remove_space_parent_in_place(&mut self) -> &mut Self;
 }
 
-impl<'w, 's, 'a> BuildChildrenDTransformExt for EntityCommands<'w, 's, 'a> {
+impl<'w, 's, 'a> BuildChildrenDTransformExt for EntityCommands<'a> {
     fn remove_space_parent_in_place(&mut self) -> &mut Self {
         let child = self.id();
-        self.commands().add(RemoveParentInPlace { child });
+        self.commands().queue(RemoveParentInPlace { child });
         self
     }
 
     fn set_space_parent_in_place(&mut self, parent: Entity) -> &mut Self {
         let child = self.id();
-        self.commands().add(AddChildInPlace { child, parent });
+        self.commands().queue(AddChildInPlace { child, parent });
         self
     }
 }

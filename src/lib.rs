@@ -88,18 +88,17 @@ impl Plugin for DTransformPlugin {
         struct SyncTransforms;
 
         app.register_type::<DTransform>()
-            .register_type::<DGlobalTransform>()
-            .add_plugins(ValidParentCheckPlugin::<DGlobalTransform>::default())
+            .register_type::<DGlobalTransform>() 
             .insert_resource(WorldOrigin::Position(DVec3::ZERO))
             .insert_resource(SimpleWorldOrigin {origin : DVec3::ZERO})
             // add transform systems to startup so the first update is "correct"
-            .configure_set(PostUpdate, DTransformSystem::TransformPropagate)
-            .configure_set(PostUpdate, SyncTransforms
+            .configure_sets(PostUpdate, DTransformSystem::TransformPropagate)
+            .configure_sets(PostUpdate, SyncTransforms
                     .after(DTransformSystem::TransformPropagate)
-                    .after(bevy::transform::TransformSystem::TransformPropagate))
-            .configure_set(PostUpdate, PropagateTransformsSet.in_set(DTransformSystem::TransformPropagate))
+                    .after(bevy::transform::TransformSystems::Propagate))
+            .configure_sets(PostUpdate, PropagateTransformsSet.in_set(DTransformSystem::TransformPropagate))
             .edit_schedule(Startup, |schedule| {
-                schedule.configure_set(
+                schedule.configure_sets(
                     DTransformSystem::TransformPropagate
                 );
             })

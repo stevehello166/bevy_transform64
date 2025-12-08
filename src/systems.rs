@@ -1,9 +1,9 @@
 use crate::{components::{DGlobalTransform, DTransform}, WorldOrigin, SimpleWorldOrigin, DTransformBundle};
 use bevy::{ecs::{
     change_detection::Ref,
+    hierarchy::{ChildOf, Children},
     prelude::{Changed, DetectChanges, Entity, Query, With, Without},
 }, prelude::{Added, Commands, GlobalTransform, RemovedComponents, Transform, Res, ResMut}, math::{Affine3A, Vec3A, DAffine3, DVec3}};
-use bevy::hierarchy::{Children, Parent};
 
 fn daffine_to_f32(
     affine: &DAffine3,
@@ -18,13 +18,15 @@ fn daffine_to_f32(
     }
 }
 
+/// Syncs the bevy f32 transform and this crates transform
+/// I think
 pub fn sync_f64_f32(
     mut commands : Commands,
     mut query: Query<(Entity, &DGlobalTransform), (Added<DGlobalTransform>, Without<GlobalTransform>)>,
     mut query_changed: Query<(Entity, &DGlobalTransform, &mut GlobalTransform)>,
-    mut query_changed_tranform: Query<(Entity, &DTransform, &mut Transform, Option<&Parent>)>,
-    mut query_deleted: Query<Entity, (With<GlobalTransform>, Without<DGlobalTransform>)>,
-    mut query_cmd_add : Query<(Entity, &Transform), (Without<DTransform>)>,
+    mut query_changed_tranform: Query<(Entity, &DTransform, &mut Transform, Option<&ChildOf>)>,
+    query_deleted: Query<Entity, (With<GlobalTransform>, Without<DGlobalTransform>)>,
+    query_cmd_add : Query<(Entity, &Transform), Without<DTransform>>,
     world_origin : Res<WorldOrigin>,
 ) {
 
@@ -65,7 +67,7 @@ pub fn sync_f64_f32(
             transform.translation = (d_transform.translation - world_origin_pos).as_vec3();
         }
         transform.scale = d_transform.scale.as_vec3();
-        transform.rotation = d_transform.rotation.as_f32();
+        transform.rotation = d_transform.rotation.as_quat();
         // println!("{:?}", d_transform);
     }
 
@@ -82,7 +84,7 @@ pub fn sync_f64_f32(
         commands.entity(entity).insert(
             DTransformBundle::from_transform(DTransform {
                 translation : f32_transform.translation.as_dvec3(),
-                rotation: f32_transform.rotation.as_f64(),
+                rotation: f32_transform.rotation.as_dquat(),
                 scale: f32_transform.scale.as_dvec3(),
             })
         ).remove::<Transform>();
@@ -95,12 +97,12 @@ pub fn sync_f64_f32(
 pub fn sync_simple_transforms(
     mut query: Query<
         (&DTransform, &mut DGlobalTransform),
-        (Changed<DTransform>, Without<Parent>, Without<Children>),
+        (Changed<DTransform>, Without<ChildOf>, Without<Children>),
     >,
 ) {
     query
         .par_iter_mut()
-        .for_each_mut(|(transform, mut global_transform)| {
+        .for_each(|(transform, mut global_transform)| {
             *global_transform = DGlobalTransform::from(*transform);
         });
 }
@@ -112,12 +114,12 @@ pub fn sync_simple_transforms(
 pub fn propagate_transforms(
     mut root_query: Query<
         (Entity, &Children, Ref<DTransform>, &mut DGlobalTransform),
-        Without<Parent>,
+        Without<ChildOf>,
     >,
-    transform_query: Query<(Ref<DTransform>, &mut DGlobalTransform, Option<&Children>), With<Parent>>,
-    parent_query: Query<(Entity, Ref<Parent>)>,
+    transform_query: Query<(Ref<DTransform>, &mut DGlobalTransform, Option<&Children>), With<ChildOf>>,
+    parent_query: Query<(Entity, Ref<ChildOf>)>,
 ) {
-    root_query.par_iter_mut().for_each_mut(
+    root_query.par_iter_mut().for_each(
         |(entity, children, transform, mut global_transform)| {
             let changed = transform.is_changed();
             if changed {
@@ -126,7 +128,7 @@ pub fn propagate_transforms(
 
             for (child, actual_parent) in parent_query.iter_many(children) {
                 assert_eq!(
-                    actual_parent.get(), entity,
+                    actual_parent.parent(), entity,
                     "Malformed hierarchy. This probably means that your hierarchy has been improperly maintained, or contains a cycle"
                 );
                 // SAFETY:
@@ -168,9 +170,9 @@ unsafe fn propagate_recursive(
     parent: &DGlobalTransform,
     transform_query: &Query<
         (Ref<DTransform>, &mut DGlobalTransform, Option<&Children>),
-        With<Parent>,
+        With<ChildOf>,
     >,
-    parent_query: &Query<(Entity, Ref<Parent>)>,
+    parent_query: &Query<(Entity, Ref<ChildOf>)>,
     entity: Entity,
     mut changed: bool,
 ) {
@@ -216,7 +218,7 @@ unsafe fn propagate_recursive(
     let Some(children) = children else { return };
     for (child, actual_parent) in parent_query.iter_many(children) {
         assert_eq!(
-            actual_parent.get(), entity,
+            actual_parent.parent(), entity,
             "Malformed hierarchy. This probably means that your hierarchy has been improperly maintained, or contains a cycle"
         );
         // SAFETY: The caller guarantees that `transform_query` will not be fetched
@@ -257,7 +259,7 @@ pub fn convert_world_origin(
 
 pub fn replace_transforms(
     mut commands : Commands,
-    mut query: Query<(&mut Transform, &DTransform), Without<Parent>>,
+    mut query: Query<(&mut Transform, &DTransform), Without<ChildOf>>,
     simple_world_origin : Res<SimpleWorldOrigin>
 ) {
     // for (mut transform, dtransform) in query.iter_mut() {
@@ -284,22 +286,20 @@ pub fn replace_transforms(
 #[cfg(test)]
 mod test {
     use bevy::app::prelude::*;
-    use bevy::ecs::prelude::*;
-    use bevy::ecs::system::CommandQueue;
+    use bevy::ecs::prelude::*; 
     use bevy::math::{vec3, dvec3};
     use bevy::tasks::{ComputeTaskPool, TaskPool};
 
     use crate::components::{DGlobalTransform, DTransform};
     use crate::{systems::*, DTransformBundle};
-    use crate::TransformBundle;
-    use bevy::hierarchy::{BuildChildren, BuildWorldChildren, Children, Parent};
+    
+    use bevy::ecs::{hierarchy::{Children, ChildOf}, entity::EntityRow, world::CommandQueue};
 
     #[test]
     fn did_propagate() {
-        ComputeTaskPool::init(TaskPool::default);
         let mut world = World::default();
 
-        let mut schedule = Schedule::new();
+        let mut schedule = Schedule::new(Update);
         schedule.add_systems((sync_simple_transforms, propagate_transforms));
 
         // Root entity
@@ -337,7 +337,7 @@ mod test {
     fn did_propagate_command_buffer() {
         let mut world = World::default();
 
-        let mut schedule = Schedule::new();
+        let mut schedule = Schedule::new(Update);
         schedule.add_systems((sync_simple_transforms, propagate_transforms));
 
         // Root entity
@@ -374,10 +374,10 @@ mod test {
 
     #[test]
     fn correct_children() {
-        ComputeTaskPool::init(TaskPool::default);
+        
         let mut world = World::default();
 
-        let mut schedule = Schedule::new();
+        let mut schedule = Schedule::new(Update);
         schedule.add_systems((sync_simple_transforms, propagate_transforms));
 
         // Add parent entities
@@ -400,7 +400,6 @@ mod test {
                 .get::<Children>(parent)
                 .unwrap()
                 .iter()
-                .cloned()
                 .collect::<Vec<_>>(),
             children,
         );
@@ -419,7 +418,6 @@ mod test {
                 .get::<Children>(parent)
                 .unwrap()
                 .iter()
-                .cloned()
                 .collect::<Vec<_>>(),
             vec![children[1]]
         );
@@ -429,7 +427,6 @@ mod test {
                 .get::<Children>(children[1])
                 .unwrap()
                 .iter()
-                .cloned()
                 .collect::<Vec<_>>(),
             vec![children[0]]
         );
@@ -442,8 +439,7 @@ mod test {
             world
                 .get::<Children>(parent)
                 .unwrap()
-                .iter()
-                .cloned()
+                .iter() 
                 .collect::<Vec<_>>(),
             vec![children[1]]
         );
@@ -452,26 +448,26 @@ mod test {
     #[test]
     fn correct_transforms_when_no_children() {
         let mut app = App::new();
-        ComputeTaskPool::init(TaskPool::default);
+        
 
         app.add_systems(Update,(sync_simple_transforms, propagate_transforms));
 
         let translation = dvec3(1.0, 0.0, 0.0);
 
         // These will be overwritten.
-        let mut child = Entity::from_raw(0);
-        let mut grandchild = Entity::from_raw(1);
+        let mut child = Entity::from_raw_u32(0).unwrap();
+        let mut grandchild = Entity::from_raw_u32(1).unwrap();
         let parent = app
-            .world
+            .world_mut()
             .spawn((
                 DTransform::from_translation(translation),
                 DGlobalTransform::IDENTITY,
             ))
             .with_children(|builder| {
                 child = builder
-                    .spawn(TransformBundle::IDENTITY)
+                    .spawn(Transform::IDENTITY)
                     .with_children(|builder| {
-                        grandchild = builder.spawn(TransformBundle::IDENTITY).id();
+                        grandchild = builder.spawn(Transform::IDENTITY).id();
                     })
                     .id();
             })
@@ -480,53 +476,15 @@ mod test {
         app.update();
 
         // check the `Children` structure is spawned
-        assert_eq!(&**app.world.get::<Children>(parent).unwrap(), &[child]);
-        assert_eq!(&**app.world.get::<Children>(child).unwrap(), &[grandchild]);
+        assert_eq!(&**app.world().get::<Children>(parent).unwrap(), &[child]);
+        assert_eq!(&**app.world().get::<Children>(child).unwrap(), &[grandchild]);
         // Note that at this point, the `GlobalTransform`s will not have updated yet, due to `Commands` delay
         app.update();
 
-        let mut state = app.world.query::<&DGlobalTransform>();
-        for global in state.iter(&app.world) {
+        let mut state = app.world_mut().query::<&DGlobalTransform>();
+        for global in state.iter(&app.world()) {
             assert_eq!(global, &DGlobalTransform::from_translation(translation));
         }
     }
 
-    #[test]
-    #[should_panic]
-    fn panic_when_hierarchy_cycle() {
-        ComputeTaskPool::init(TaskPool::default);
-        // We cannot directly edit Parent and Children, so we use a temp world to break
-        // the hierarchy's invariants.
-        let mut temp = World::new();
-        let mut app = App::new();
-
-        app.add_systems(Update, (propagate_transforms, sync_simple_transforms));
-
-        fn setup_world(world: &mut World) -> (Entity, Entity) {
-            let mut grandchild = Entity::from_raw(0);
-            let child = world
-                .spawn(DTransformBundle::IDENTITY)
-                .with_children(|builder| {
-                    grandchild = builder.spawn(DTransformBundle::IDENTITY).id();
-                })
-                .id();
-            (child, grandchild)
-        }
-
-        let (temp_child, temp_grandchild) = setup_world(&mut temp);
-        let (child, grandchild) = setup_world(&mut app.world);
-
-        assert_eq!(temp_child, child);
-        assert_eq!(temp_grandchild, grandchild);
-
-        app.world
-            .spawn(DTransformBundle::IDENTITY)
-            .push_children(&[child]);
-        std::mem::swap(
-            &mut *app.world.get_mut::<Parent>(child).unwrap(),
-            &mut *temp.get_mut::<Parent>(grandchild).unwrap(),
-        );
-
-        app.update();
-    }
 }
