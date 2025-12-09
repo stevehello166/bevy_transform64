@@ -9,7 +9,7 @@ use bevy::{
         prelude::{Changed, DetectChanges, Entity, Query, With, Without},
     },
     math::{Affine3A, DAffine3, DVec3, Vec3A},
-    prelude::{Added, Commands, GlobalTransform, Res, ResMut, Transform, vec, Vec},
+    prelude::{Added, Commands, GlobalTransform, Res, ResMut, Transform},
 };
 
 fn daffine_to_f32(affine: &DAffine3) -> Affine3A {
